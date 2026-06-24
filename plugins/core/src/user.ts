@@ -58,9 +58,11 @@ export class User extends ScryptedDeviceBase implements Settings, ScryptedUser {
                     ? [
                         // grant this? not sure.
                         addAccessControlsForInterface(self.id, ScryptedInterface.ScryptedDevice),
-                        addAccessControlsForInterface(sdk.systemManager.getDeviceByName('@scrypted/webrtc').id,
-                            ScryptedInterface.ScryptedDevice,
-                            ScryptedInterface.EngineIOHandler),
+                        ...sdk.systemManager.getDeviceByName('@scrypted/webrtc')
+                            ? [addAccessControlsForInterface(sdk.systemManager.getDeviceByName('@scrypted/webrtc').id,
+                                ScryptedInterface.ScryptedDevice,
+                                ScryptedInterface.EngineIOHandler)]
+                            : [],
                         addAccessControlsForInterface(sdk.systemManager.getDeviceByName('@scrypted/core').id,
                             ScryptedInterface.ScryptedDevice,
                             ScryptedInterface.EngineIOHandler),
@@ -141,13 +143,8 @@ export class UsersCore extends ScryptedDeviceBase implements Readme, DeviceProvi
             deviceCreator: 'Scrypted User',
         };
 
-        this.syncUsers()
-        .then(length => {
-            if (!length) {
-                this.console.log('no users found, looping for first user');
-                setInterval(() => this.syncUsers(), 60 * 1000);
-            }
-        })
+        this.syncUsers();
+        setInterval(() => this.syncUsers(), 60 * 1000);
     }
 
     async getDevice(nativeId: string): Promise<any> {
