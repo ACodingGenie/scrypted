@@ -603,8 +603,8 @@ async function start(mainFilename: string, options?: {
         const nonce = crypto.randomBytes(16).toString('hex');
         const callbackUrl = await scrypted.oidcService.getRedirectUri(`${req.protocol}://${req.get('host')}/login/oidc/callback`);
         try {
-            const authUrl = await scrypted.oidcService.getAuthorizationUrl(callbackUrl, state, nonce);
-            res.cookie('oidc_state', JSON.stringify({ state, nonce }), {
+            const { url: authUrl, codeVerifier } = await scrypted.oidcService.getAuthorizationUrl(callbackUrl, state, nonce);
+            res.cookie('oidc_state', JSON.stringify({ state, nonce, codeVerifier }), {
                 maxAge: 600000,
                 signed: true,
                 httpOnly: true,
@@ -629,9 +629,9 @@ async function start(mainFilename: string, options?: {
             return;
         }
         try {
-            const { state, nonce } = JSON.parse(rawState) as { state: string; nonce: string };
+            const { state, nonce, codeVerifier } = JSON.parse(rawState) as { state: string; nonce: string; codeVerifier: string };
             const callbackUrl = await scrypted.oidcService.getRedirectUri(`${req.protocol}://${req.get('host')}/login/oidc/callback`);
-            const { sub, username, isAdmin } = await scrypted.oidcService.exchangeCode(callbackUrl, req.query as any, { state, nonce });
+            const { sub, username, isAdmin } = await scrypted.oidcService.exchangeCode(callbackUrl, req.query as any, { state, nonce, codeVerifier });
             const user = await scrypted.usersService.findOrCreateOidcUser(username, sub, isAdmin);
             hasLogin = true;
             const userToken = new UserToken(user._id, user.aclId, Date.now(), ONE_DAY_MILLISECONDS);

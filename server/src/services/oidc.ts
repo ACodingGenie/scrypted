@@ -1,4 +1,4 @@
-import { CallbackParamsType, Client, Issuer } from 'openid-client';
+import { CallbackParamsType, Client, generators, Issuer } from 'openid-client';
 import { Settings } from '../db-types';
 import { ScryptedRuntime } from '../runtime';
 
@@ -6,10 +6,8 @@ export interface OIDCConfig {
     discoveryUrl: string;
     clientId: string;
     clientSecret: string;
-    usernameClaim: string;
     roleClaim: string;
     adminRoleValue: string;
-    allowUnmappedUsers: boolean;
     authType: string;
     redirectUri?: string;
 }
@@ -34,10 +32,8 @@ export class OIDCService {
             discoveryUrl: process.env.SCRYPTED_OIDC_DISCOVERY_URL ?? stored.discoveryUrl ?? '',
             clientId: process.env.SCRYPTED_OIDC_CLIENT_ID ?? stored.clientId ?? '',
             clientSecret: process.env.SCRYPTED_OIDC_CLIENT_SECRET ?? stored.clientSecret ?? '',
-            usernameClaim: process.env.SCRYPTED_OIDC_USERNAME_CLAIM ?? stored.usernameClaim ?? 'preferred_username',
             roleClaim: process.env.SCRYPTED_OIDC_ROLE_CLAIM ?? stored.roleClaim ?? '',
             adminRoleValue: process.env.SCRYPTED_OIDC_ADMIN_ROLE_VALUE ?? stored.adminRoleValue ?? '',
-            allowUnmappedUsers: stored.allowUnmappedUsers ?? true,
             authType: process.env.SCRYPTED_AUTH_TYPE ?? stored.authType ?? 'basic',
             redirectUri: process.env.SCRYPTED_OIDC_REDIRECT_URI ?? stored.redirectUri,
         };
@@ -114,30 +110,35 @@ export class OIDCService {
         return this.cachedClient;
     }
 
-    async getAuthorizationUrl(redirectUri: string, state: string, nonce: string): Promise<string> {
+    async getAuthorizationUrl(redirectUri: string, state: string, nonce: string): Promise<{ url: string; codeVerifier: string }> {
         const config = await this.getConfig();
         if (!config)
             throw new Error('OIDC not configured');
         const client = await this.getClient(config);
-        return client.authorizationUrl({
+        const codeVerifier = generators.codeVerifier();
+        const codeChallenge = generators.codeChallenge(codeVerifier);
+        const url = client.authorizationUrl({
             redirect_uri: redirectUri,
             scope: 'openid email profile',
             state,
             nonce,
+            code_challenge: codeChallenge,
+            code_challenge_method: 'S256',
         });
+        return { url, codeVerifier };
     }
 
-    async exchangeCode(redirectUri: string, params: CallbackParamsType, checks: { state: string; nonce: string }): Promise<{ sub: string; username: string; isAdmin: boolean }> {
+    async exchangeCode(redirectUri: string, params: CallbackParamsType, checks: { state: string; nonce: string; codeVerifier: string }): Promise<{ sub: string; username: string; isAdmin: boolean }> {
         const config = await this.getConfig();
         if (!config)
             throw new Error('OIDC not configured');
 
         const client = await this.getClient(config);
-        const tokenSet = await client.callback(redirectUri, params, { state: checks.state, nonce: checks.nonce });
+        const tokenSet = await client.callback(redirectUri, params, { state: checks.state, nonce: checks.nonce, code_verifier: checks.codeVerifier });
         const claims = tokenSet.claims();
 
         const sub = claims.sub;
-        const username = (claims[config.usernameClaim] as string | undefined)
+        const username = (claims.preferred_username as string | undefined)
             ?? (claims.email as string | undefined)
             ?? sub;
 
@@ -147,10 +148,6 @@ export class OIDCService {
             isAdmin = Array.isArray(roleValue)
                 ? roleValue.includes(config.adminRoleValue)
                 : roleValue === config.adminRoleValue;
-        }
-
-        if (!config.allowUnmappedUsers && !isAdmin) {
-            throw new Error('User role not mapped and unmapped users are not allowed');
         }
 
         return { sub, username, isAdmin };

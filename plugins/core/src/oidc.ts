@@ -6,7 +6,6 @@ const ENV_OVERRIDES: Record<string, string> = {
     discoveryUrl: 'SCRYPTED_OIDC_DISCOVERY_URL',
     clientId: 'SCRYPTED_OIDC_CLIENT_ID',
     clientSecret: 'SCRYPTED_OIDC_CLIENT_SECRET',
-    usernameClaim: 'SCRYPTED_OIDC_USERNAME_CLAIM',
     roleClaim: 'SCRYPTED_OIDC_ROLE_CLAIM',
     adminRoleValue: 'SCRYPTED_OIDC_ADMIN_ROLE_VALUE',
     authType: 'SCRYPTED_AUTH_TYPE',
@@ -34,13 +33,6 @@ const SETTING_DEFS: Setting[] = [
         group: 'OIDC',
     },
     {
-        key: 'usernameClaim',
-        title: 'Username Claim',
-        description: 'JWT claim used as the Scrypted username.',
-        type: 'string',
-        group: 'Claims',
-    },
-    {
         key: 'roleClaim',
         title: 'Role Claim',
         description: 'JWT claim that carries the user role.',
@@ -52,13 +44,6 @@ const SETTING_DEFS: Setting[] = [
         title: 'Admin Role Value',
         description: 'The role claim value that grants admin access.',
         type: 'string',
-        group: 'Claims',
-    },
-    {
-        key: 'allowUnmappedUsers',
-        title: 'Allow Users Without Role',
-        description: 'Allow login for users whose role claim does not match the admin value.',
-        type: 'boolean',
         group: 'Claims',
     },
     {
