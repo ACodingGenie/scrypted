@@ -641,7 +641,7 @@ async function start(mainFilename: string, options?: {
                 signed: true,
                 httpOnly: true,
             });
-            res.redirect('./endpoint/@scrypted/core/public/');
+            res.redirect('/endpoint/@scrypted/core/public/');
         }
         catch (e) {
             console.error('OIDC callback error', e);

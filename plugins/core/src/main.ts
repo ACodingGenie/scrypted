@@ -222,7 +222,7 @@ class ScryptedCore extends ScryptedDeviceBase implements HttpRequestHandler, Dev
                 {
                     name: 'OIDC Settings',
                     nativeId: OIDCNativeId,
-                    interfaces: [ScryptedInterface.ScryptedSystemDevice, ScryptedInterface.Settings, ScryptedInterface.Readme],
+                    interfaces: [ScryptedInterface.ScryptedSystemDevice, ScryptedInterface.Settings, ScryptedInterface.ScryptedSettings, ScryptedInterface.Readme],
                     type: ScryptedDeviceType.Internal,
                 },
             );

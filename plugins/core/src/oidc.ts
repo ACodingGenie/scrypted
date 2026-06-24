@@ -79,23 +79,15 @@ export class OIDCCore extends ScryptedDeviceBase implements Settings, Readme {
         return SETTING_DEFS.map(def => {
             const envVar = ENV_OVERRIDES[def.key!];
             const envValue = envVar ? process.env[envVar] : undefined;
-            if (envValue !== undefined) {
-                return {
-                    ...def,
-                    value: envValue,
-                    readonly: true,
-                    description: `${def.description ?? ''} (Set by ${envVar})`.trim(),
-                };
-            }
+            const value = envValue ?? config[def.key!];
             return {
                 ...def,
-                value: config[def.key!],
+                value,
+                readonly: true,
             };
         });
     }
 
     async putSetting(key: string, value: SettingValue): Promise<void> {
-        const oidcService = await sdk.systemManager.getComponent('oidc');
-        await oidcService.setConfig({ [key]: value });
     }
 }
