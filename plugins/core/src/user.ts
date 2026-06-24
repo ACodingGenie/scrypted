@@ -83,12 +83,21 @@ export class User extends ScryptedDeviceBase implements Settings, ScryptedUser {
     async getSettings(): Promise<Setting[]> {
         await this.getAdmin();
 
+        const usersService = await sdk.systemManager.getComponent('users');
+        const oidcSubject: string | undefined = await usersService.getOidcSubject?.(this.username).catch(() => undefined);
+
         return [
             {
                 key: 'username',
                 title: 'User Name',
                 readonly: true,
                 value: this.username,
+            },
+            {
+                key: 'oidcSubject',
+                title: 'OIDC Subject',
+                readonly: true,
+                value: oidcSubject ?? '(not linked)',
             },
             {
                 key: 'password',
