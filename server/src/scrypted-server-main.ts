@@ -594,25 +594,48 @@ async function start(mainFilename: string, options?: {
         };
     }
 
+    const startOidcFlow = async (req: express.Request, res: express.Response, extra?: Record<string, string>) => {
+        const state = crypto.randomBytes(16).toString('hex');
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const callbackUrl = await scrypted.oidcService.getRedirectUri(`${req.protocol}://${req.get('host')}/login/oidc/callback`);
+        const { url: authUrl, codeVerifier } = await scrypted.oidcService.getAuthorizationUrl(callbackUrl, state, nonce);
+        res.cookie('oidc_state', JSON.stringify({ state, nonce, codeVerifier, ...extra }), {
+            maxAge: 600000,
+            signed: true,
+            httpOnly: true,
+            secure: req.secure,
+        });
+        res.redirect(authUrl);
+    };
+
     app.get('/login/oidc', async (req, res) => {
         if (!await scrypted.oidcService.isEnabled()) {
             res.status(404).end();
             return;
         }
-        const state = crypto.randomBytes(16).toString('hex');
-        const nonce = crypto.randomBytes(16).toString('hex');
-        const callbackUrl = await scrypted.oidcService.getRedirectUri(`${req.protocol}://${req.get('host')}/login/oidc/callback`);
         try {
-            const { url: authUrl, codeVerifier } = await scrypted.oidcService.getAuthorizationUrl(callbackUrl, state, nonce);
-            res.cookie('oidc_state', JSON.stringify({ state, nonce, codeVerifier }), {
-                maxAge: 600000,
-                signed: true,
-                httpOnly: true,
-            });
-            res.redirect(authUrl);
+            await startOidcFlow(req, res);
         }
         catch (e) {
             console.error('OIDC authorization error', e);
+            res.status(500).send('OIDC error');
+        }
+    });
+
+    app.get('/login/oidc/link', async (req, res) => {
+        if (!await scrypted.oidcService.isEnabled()) {
+            res.status(404).end();
+            return;
+        }
+        if (!res.locals.username) {
+            res.status(401).send('Authentication required');
+            return;
+        }
+        try {
+            await startOidcFlow(req, res, { linkUsername: res.locals.username });
+        }
+        catch (e) {
+            console.error('OIDC link error', e);
             res.status(500).send('OIDC error');
         }
     });
@@ -629,9 +652,20 @@ async function start(mainFilename: string, options?: {
             return;
         }
         try {
-            const { state, nonce, codeVerifier } = JSON.parse(rawState) as { state: string; nonce: string; codeVerifier: string };
+            const { state, nonce, codeVerifier, linkUsername } = JSON.parse(rawState) as { state: string; nonce: string; codeVerifier: string; linkUsername?: string };
             const callbackUrl = await scrypted.oidcService.getRedirectUri(`${req.protocol}://${req.get('host')}/login/oidc/callback`);
             const { sub, username, isAdmin } = await scrypted.oidcService.exchangeCode(callbackUrl, req.query as any, { state, nonce, codeVerifier });
+
+            if (linkUsername) {
+                if (res.locals.username !== linkUsername) {
+                    res.status(403).send('Session mismatch — please restart the linking flow');
+                    return;
+                }
+                await scrypted.usersService.linkOidcSubject(linkUsername, sub);
+                res.redirect('/endpoint/@scrypted/core/public/');
+                return;
+            }
+
             const user = await scrypted.usersService.findOrCreateOidcUser(username, sub, isAdmin);
             hasLogin = true;
             const userToken = new UserToken(user._id, user.aclId, Date.now(), ONE_DAY_MILLISECONDS);
@@ -770,6 +804,7 @@ async function start(mainFilename: string, options?: {
                 // TODO: do not return the token from a short term auth mechanism?
                 token: user?.token,
                 authType,
+                oidcLinked: !!(user?.oidcSubject),
                 ...alternateAddresses,
                 hostname,
             });
@@ -800,6 +835,7 @@ async function start(mainFilename: string, options?: {
                 username,
                 token: user.token,
                 authType,
+                oidcLinked: !!(user?.oidcSubject),
                 ...alternateAddresses,
                 hostname,
             });
@@ -812,11 +848,13 @@ async function start(mainFilename: string, options?: {
             if (!userToken)
                 throw new Error('Not logged in.');
 
+            const cookieUser = scrypted.usersService.users.get(userToken.username);
             res.send({
                 ...createTokens(userToken),
                 expiration: (userToken.timestamp + userToken.duration) - Date.now(),
                 username: userToken.username,
                 authType,
+                oidcLinked: !!(cookieUser?.oidcSubject),
                 ...alternateAddresses,
                 hostname,
             })

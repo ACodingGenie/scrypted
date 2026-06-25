@@ -137,10 +137,12 @@ export class OIDCService {
         const tokenSet = await client.callback(redirectUri, params, { state: checks.state, nonce: checks.nonce, code_verifier: checks.codeVerifier });
         const claims = tokenSet.claims();
 
-        const sub = claims.sub;
-        const username = (claims.preferred_username as string | undefined)
-            ?? (claims.email as string | undefined)
-            ?? sub;
+        const iss = claims.iss;
+        const sub = `${iss}:${claims.sub}`;
+        const rawUsername = typeof claims.preferred_username === 'string' ? claims.preferred_username
+            : typeof claims.email === 'string' ? claims.email
+            : claims.sub;
+        const username = rawUsername.toLowerCase().replace(/[^a-z0-9._@-]/g, '_').slice(0, 128);
 
         let isAdmin = false;
         if (config.roleClaim && config.adminRoleValue) {

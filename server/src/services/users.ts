@@ -82,6 +82,32 @@ export class UsersService {
         return this.users.get(username)?.oidcSubject;
     }
 
+    async linkOidcSubject(username: string, sub: string): Promise<void> {
+        await this.ensureUsersPromise();
+        const user = this.users.get(username);
+        if (!user)
+            throw new Error(`User "${username}" not found`);
+        const existing = await this.findUserByOidcSubject(sub);
+        if (existing && existing._id !== username)
+            throw new Error('OIDC subject is already linked to another account');
+        const updated = Object.assign(new ScryptedUser(), user, { oidcSubject: sub });
+        await this.scrypted.datastore.upsert(updated);
+        this.users.set(updated._id, updated);
+        this.updateUsersPromise();
+    }
+
+    async unlinkOidcSubject(username: string): Promise<void> {
+        await this.ensureUsersPromise();
+        const user = this.users.get(username);
+        if (!user)
+            throw new Error(`User "${username}" not found`);
+        const updated = Object.assign(new ScryptedUser(), user);
+        delete updated.oidcSubject;
+        await this.scrypted.datastore.upsert(updated);
+        this.users.set(updated._id, updated);
+        this.updateUsersPromise();
+    }
+
     async findUserByOidcSubject(sub: string): Promise<ScryptedUser | undefined> {
         await this.ensureUsersPromise();
         for (const user of this.users.values()) {
@@ -117,9 +143,8 @@ export class UsersService {
         if (bySubject)
             return syncAndPersist(bySubject);
 
-        const byUsername = this.users.get(username);
-        if (byUsername)
-            return syncAndPersist(byUsername);
+        if (this.users.has(username))
+            throw new Error(`Username "${username}" is already taken by a local account. An admin must resolve the conflict.`);
 
         const newUser = new ScryptedUser();
         newUser._id = username;

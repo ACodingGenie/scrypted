@@ -101,6 +101,12 @@ export class User extends ScryptedDeviceBase implements Settings, ScryptedUser {
                 readonly: true,
                 value: oidcSubject ?? '(not linked)',
             },
+            ...oidcSubject ? [{
+                key: 'unlinkOidc',
+                title: 'Unlink OIDC Account',
+                description: 'Remove the OIDC association from this account.',
+                type: 'button' as const,
+            }] : [],
             {
                 key: 'password',
                 title: 'Password',
@@ -112,6 +118,11 @@ export class User extends ScryptedDeviceBase implements Settings, ScryptedUser {
     }
 
     async putSetting(key: string, value: SettingValue): Promise<void> {
+        if (key === 'unlinkOidc') {
+            const usersService = await sdk.systemManager.getComponent('users');
+            await usersService.unlinkOidcSubject(this.username);
+            return;
+        }
         if (key !== 'password')
             return this.storageSettings.putSetting(key, value);
         const usersService = await sdk.systemManager.getComponent('users');
